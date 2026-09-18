@@ -5,8 +5,9 @@
   "description": "Universal accessibility profile parser and behavioral interceptors for Unity game engine.",
   "unity": "2021.3",
   "author": {
-    "name": "AnyUser.Net",
-    "url": "https://anyuser.net"
+    "name": "CwtchCode (AnyUser.Net)",
+    "email": "contact@anyuser.net",
+    "url": "https://cwtchcode.com"
   },
   "keywords": [
     "accessibility",
