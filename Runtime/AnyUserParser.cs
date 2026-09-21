@@ -49,6 +49,8 @@ namespace AnyUser
             }
         }
 
+        public bool IsEnabled { get; private set; } = true;
+
         private void Awake()
         {
             if (Instance == null)
@@ -56,6 +58,7 @@ namespace AnyUser
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
 
+                IsEnabled = PlayerPrefs.GetInt("AnyUser_Enabled", 1) == 1;
                 SceneManager.sceneLoaded += OnSceneLoaded;
 
                 if (loadOnAwake)
@@ -69,6 +72,68 @@ namespace AnyUser
             }
         }
 
+        private void Update()
+        {
+            // F10 Shortcut: Toggle AnyUser Profile on/off
+            if (Input.GetKeyDown(KeyCode.F10))
+            {
+                ToggleEnabled();
+            }
+        }
+
+        public bool ToggleEnabled()
+        {
+            SetEnabled(!IsEnabled);
+            return IsEnabled;
+        }
+
+        public void SetEnabled(bool active)
+        {
+            IsEnabled = active;
+            PlayerPrefs.SetInt("AnyUser_Enabled", IsEnabled ? 1 : 0);
+            PlayerPrefs.Save();
+
+            if (IsEnabled)
+            {
+                ApplyDropInInterceptors();
+                Debug.Log($"[AnyUser] Profile Enabled ({currentProfile?.metadata?.profile_name ?? "Default"}).");
+            }
+            else
+            {
+                RevertToVanilla();
+                Debug.Log("[AnyUser] Profile Disabled (Vanilla Defaults).");
+            }
+
+            OnProfileChanged?.Invoke(currentProfile);
+        }
+
+        private void RevertToVanilla()
+        {
+            // Reset CanvasScalers to 1.0f
+            var scalers = UnityEngine.Object.FindObjectsOfType<CanvasScaler>();
+            foreach (var scaler in scalers)
+            {
+                scaler.scaleFactor = 1.0f;
+            }
+
+            // Hide colorblind overlay
+            if (overlayCanvas != null)
+            {
+                overlayCanvas.gameObject.SetActive(false);
+            }
+
+            // Disable AudioListener LowPassFilter
+            var listener = UnityEngine.Object.FindObjectOfType<AudioListener>();
+            if (listener != null)
+            {
+                var filter = listener.GetComponent<AudioLowPassFilter>();
+                if (filter != null)
+                {
+                    filter.enabled = false;
+                }
+            }
+        }
+
         private void OnDestroy()
         {
             SceneManager.sceneLoaded -= OnSceneLoaded;
@@ -76,15 +141,22 @@ namespace AnyUser
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            ApplyDropInInterceptors();
+            if (IsEnabled)
+            {
+                ApplyDropInInterceptors();
+            }
+            else
+            {
+                RevertToVanilla();
+            }
         }
 
         /// <summary>
-        /// Attempts to discover an .anyuser profile across common developer/user locations.
+        /// Attempts to discover an .anyuser profile across common developer/user locations (including OS Documents).
         /// </summary>
         public void AutoDiscoverAndLoadProfile()
         {
-            string[] searchPaths = new string[]
+            var searchPaths = new System.Collections.Generic.List<string>
             {
                 Path.Combine(Application.persistentDataPath, customProfileFileName),
                 Path.Combine(Application.streamingAssetsPath, customProfileFileName),
@@ -92,6 +164,20 @@ namespace AnyUser
                 Path.Combine(Directory.GetCurrentDirectory(), customProfileFileName),
                 Path.Combine(Application.dataPath, "..", customProfileFileName)
             };
+
+            // Global OS Documents / User profile paths
+            string myDocs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            if (!string.IsNullOrEmpty(myDocs))
+            {
+                searchPaths.Add(Path.Combine(myDocs, "AnyUser", customProfileFileName));
+            }
+
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrEmpty(userProfile))
+            {
+                searchPaths.Add(Path.Combine(userProfile, "Documents", "AnyUser", customProfileFileName));
+                searchPaths.Add(Path.Combine(userProfile, ".anyuser", customProfileFileName));
+            }
 
             bool loaded = false;
             foreach (string path in searchPaths)
@@ -111,7 +197,10 @@ namespace AnyUser
                 OnProfileLoaded?.Invoke(currentProfile);
                 OnProfileChanged?.Invoke(currentProfile);
                 Debug.Log("[AnyUser] Operating on canonical Draft-07 accessibility baseline.");
-                ApplyDropInInterceptors();
+                if (IsEnabled)
+                {
+                    ApplyDropInInterceptors();
+                }
             }
         }
 
