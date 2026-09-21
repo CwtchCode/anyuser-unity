@@ -341,17 +341,34 @@ namespace AnyUser
             };
         }
 
-        // Typed Quick Accessors
+        // Typed Quick Accessors (Vision)
         public float UiScale => currentProfile?.vision?.ui_scale ?? 1.0f;
         public float ScreenShake => currentProfile?.vision?.screen_shake ?? 1.0f;
         public string ColorblindFilter => currentProfile?.vision?.colorblind_filter ?? "none";
         public bool HighContrastMode => currentProfile?.vision?.high_contrast_mode ?? false;
+        public string FontPreference => currentProfile?.vision?.font_preference ?? "default";
+        public bool FlashingEffects => currentProfile?.vision?.flashing_effects ?? true;
+        public bool SubtitlesEnabled => currentProfile?.vision?.subtitles?.enabled ?? false;
+        public string SubtitleSize => currentProfile?.vision?.subtitles?.size ?? "medium";
+        public bool SubtitleSpeakerNames => currentProfile?.vision?.subtitles?.speaker_names ?? true;
+        public float SubtitleBackgroundOpacity => currentProfile?.vision?.subtitles?.background_opacity ?? 0.75f;
+
+        // Typed Quick Accessors (Motor)
         public bool ToggleInsteadOfHold => currentProfile?.motor?.toggle_instead_of_hold ?? false;
+        public bool QteAutoComplete => currentProfile?.motor?.qte_auto_complete ?? false;
         public int InputRepeatDelayMs => currentProfile?.motor?.input_repeat_delay_ms ?? 0;
         public float AimAssistStrength => currentProfile?.motor?.aim_assist_strength ?? 0.0f;
-        public bool TinnitusFrequencyCut => currentProfile?.audio?.tinnitus_frequency_cut ?? false;
+
+        // Typed Quick Accessors (Audio)
         public bool DialogueBoost => currentProfile?.audio?.dialogue_boost ?? false;
+        public bool MonoAudio => currentProfile?.audio?.mono_audio ?? false;
+        public float BackgroundMusicDucking => currentProfile?.audio?.background_music_ducking ?? 0.0f;
+        public bool TinnitusFrequencyCut => currentProfile?.audio?.tinnitus_frequency_cut ?? false;
+
+        // Typed Quick Accessors (Cognitive)
         public bool ReadingLevelSimplified => currentProfile?.cognitive?.reading_level_simplified ?? false;
+        public bool DisableTimeLimits => currentProfile?.cognitive?.disable_time_limits ?? false;
+        public string TutorialReminders => currentProfile?.cognitive?.tutorial_reminders ?? "medium";
     }
 
     [Serializable]
