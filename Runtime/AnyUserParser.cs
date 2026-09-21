@@ -1,12 +1,14 @@
 using System;
 using System.IO;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace AnyUser
 {
     /// <summary>
     /// AnyUser Accessibility Standard - Unity Reference Parser and Ingestion Engine.
-    /// Ingests, validates, and exposes .anyuser profiles before Frame 1.
+    /// Ingests, validates, and exposes .anyuser profiles before Frame 1 with Zero-Code Drop-In Automation.
     /// </summary>
     [DefaultExecutionOrder(-1000)]
     public class AnyUserParser : MonoBehaviour
@@ -24,12 +26,37 @@ namespace AnyUser
         [SerializeField] private bool loadOnAwake = true;
         [SerializeField] private string customProfileFileName = "profile.anyuser";
 
+        private Canvas overlayCanvas;
+        private Image overlayImage;
+
+        /// <summary>
+        /// True Zero-Touch Initialization: Automatically bootstraps AnyUser before any scene loads
+        /// even if the developer never added a prefab or GameObject to the scene hierarchy.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void AutoBootstrapOnLoad()
+        {
+            if (Instance == null)
+            {
+                var existing = UnityEngine.Object.FindObjectOfType<AnyUserParser>();
+                if (existing == null)
+                {
+                    GameObject go = new GameObject("AnyUser_RuntimeEngine");
+                    Instance = go.AddComponent<AnyUserParser>();
+                    DontDestroyOnLoad(go);
+                    Instance.AutoDiscoverAndLoadProfile();
+                }
+            }
+        }
+
         private void Awake()
         {
             if (Instance == null)
             {
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
+
+                SceneManager.sceneLoaded += OnSceneLoaded;
 
                 if (loadOnAwake)
                 {
@@ -42,29 +69,49 @@ namespace AnyUser
             }
         }
 
+        private void OnDestroy()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+        }
+
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            ApplyDropInInterceptors();
+        }
+
         /// <summary>
-        /// Attempts to discover an .anyuser profile in persistentDataPath or StreamingAssets.
+        /// Attempts to discover an .anyuser profile across common developer/user locations.
         /// </summary>
         public void AutoDiscoverAndLoadProfile()
         {
-            string persistentPath = Path.Combine(Application.persistentDataPath, customProfileFileName);
-            string streamingPath = Path.Combine(Application.streamingAssetsPath, customProfileFileName);
+            string[] searchPaths = new string[]
+            {
+                Path.Combine(Application.persistentDataPath, customProfileFileName),
+                Path.Combine(Application.streamingAssetsPath, customProfileFileName),
+                Path.Combine(Application.dataPath, customProfileFileName),
+                Path.Combine(Directory.GetCurrentDirectory(), customProfileFileName),
+                Path.Combine(Application.dataPath, "..", customProfileFileName)
+            };
 
-            if (File.Exists(persistentPath))
+            bool loaded = false;
+            foreach (string path in searchPaths)
             {
-                LoadProfileFromFile(persistentPath);
+                if (File.Exists(path))
+                {
+                    Debug.Log($"[AnyUser] Discovered profile at: {path}");
+                    loaded = LoadProfileFromFile(path);
+                    if (loaded) break;
+                }
             }
-            else if (File.Exists(streamingPath))
-            {
-                LoadProfileFromFile(streamingPath);
-            }
-            else
+
+            if (!loaded)
             {
                 // Fall back to default Draft-07 baseline
                 currentProfile = GetDefaultProfile();
                 OnProfileLoaded?.Invoke(currentProfile);
                 OnProfileChanged?.Invoke(currentProfile);
-                Debug.Log("[AnyUser] Initialized with canonical Draft-07 accessibility baseline.");
+                Debug.Log("[AnyUser] Operating on canonical Draft-07 accessibility baseline.");
+                ApplyDropInInterceptors();
             }
         }
 
@@ -104,7 +151,8 @@ namespace AnyUser
                     currentProfile = profile;
                     OnProfileLoaded?.Invoke(currentProfile);
                     OnProfileChanged?.Invoke(currentProfile);
-                    Debug.Log($"[AnyUser] Profile loaded successfully. UI Scale: {UiScale} | Screen Shake: {ScreenShake}");
+                    Debug.Log($"[AnyUser] Profile loaded successfully. UI Scale: {UiScale:F2} | Screen Shake: {ScreenShake:F2} | Aim Assist: {AimAssistStrength:F2}");
+                    ApplyDropInInterceptors();
                     return true;
                 }
             }
@@ -113,6 +161,140 @@ namespace AnyUser
                 Debug.LogError($"[AnyUser] Failed to parse profile JSON: {ex.Message}");
             }
             return false;
+        }
+
+        /// <summary>
+        /// Applies all automated drop-in interceptors without requiring changes to game code.
+        /// </summary>
+        public void ApplyDropInInterceptors()
+        {
+            ApplyGlobalUIScaling();
+            ApplyColorblindOverlay();
+            ApplyAudioAccessibility();
+        }
+
+        /// <summary>
+        /// Automatically adjusts CanvasScaler scale factors across active UI scenes.
+        /// </summary>
+        private void ApplyGlobalUIScaling()
+        {
+            float scale = UiScale;
+            if (scale <= 0f) return;
+
+            var scalers = UnityEngine.Object.FindObjectsOfType<CanvasScaler>();
+            foreach (var scaler in scalers)
+            {
+                scaler.scaleFactor = scale;
+            }
+
+            if (scalers.Length > 0)
+            {
+                Debug.Log($"[AnyUser] Drop-In Interceptor: Applied UI scale {scale:F2} across {scalers.Length} CanvasScaler(s).");
+            }
+        }
+
+        /// <summary>
+        /// Automatically spawns and manages a top-layer screen-space overlay with colorblind compensation.
+        /// </summary>
+        private void ApplyColorblindOverlay()
+        {
+            string filter = ColorblindFilter.ToLowerInvariant();
+            int filterMode = 0;
+            switch (filter)
+            {
+                case "protanopia": filterMode = 1; break;
+                case "deuteranopia": filterMode = 2; break;
+                case "tritanopia": filterMode = 3; break;
+                case "achromatopsia":
+                case "monochromacy":
+                case "greyscale":
+                case "grayscale": filterMode = 4; break;
+            }
+
+            if (filterMode > 0)
+            {
+                if (overlayCanvas == null)
+                {
+                    GameObject canvasObj = new GameObject("AnyUser_ColorblindOverlayCanvas");
+                    overlayCanvas = canvasObj.AddComponent<Canvas>();
+                    overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                    overlayCanvas.sortingOrder = 32767; // Render in front of everything
+
+                    canvasObj.AddComponent<CanvasScaler>();
+                    var raycaster = canvasObj.AddComponent<GraphicRaycaster>();
+                    raycaster.enabled = false; // Do not block UI clicks
+
+                    DontDestroyOnLoad(canvasObj);
+
+                    GameObject imgObj = new GameObject("ColorblindImage");
+                    imgObj.transform.SetParent(canvasObj.transform, false);
+                    overlayImage = imgObj.AddComponent<Image>();
+                    overlayImage.raycastTarget = false;
+
+                    RectTransform rect = imgObj.GetComponent<RectTransform>();
+                    rect.anchorMin = Vector2.zero;
+                    rect.anchorMax = Vector2.one;
+                    rect.offsetMin = Vector2.zero;
+                    rect.offsetMax = Vector2.zero;
+
+                    Shader shader = Shader.Find("AnyUser/ColorblindCompensation");
+                    if (shader != null)
+                    {
+                        Material mat = new Material(shader);
+                        overlayImage.material = mat;
+                    }
+                }
+
+                if (overlayImage != null && overlayImage.material != null)
+                {
+                    overlayImage.material.SetInt("_FilterMode", filterMode);
+                }
+
+                if (overlayCanvas != null)
+                {
+                    overlayCanvas.gameObject.SetActive(true);
+                }
+                Debug.Log($"[AnyUser] Drop-In Interceptor: Fullscreen Colorblind compensation active (Filter: {filter} [{filterMode}]).");
+            }
+            else if (overlayCanvas != null)
+            {
+                overlayCanvas.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// Automatically adjusts global audio listener settings for mono downmixing and tinnitus high-cut.
+        /// </summary>
+        private void ApplyAudioAccessibility()
+        {
+            try
+            {
+                if (currentProfile?.audio?.mono_audio == true)
+                {
+                    UnityEngine.AudioSettings.speakerMode = AudioSpeakerMode.Mono;
+                    Debug.Log("[AnyUser] Drop-In Interceptor: Audio speakerMode set to Mono.");
+                }
+
+                if (TinnitusFrequencyCut)
+                {
+                    var listener = UnityEngine.Object.FindObjectOfType<AudioListener>();
+                    if (listener != null)
+                    {
+                        var filter = listener.GetComponent<AudioLowPassFilter>();
+                        if (filter == null)
+                        {
+                            filter = listener.gameObject.AddComponent<AudioLowPassFilter>();
+                        }
+                        filter.cutoffFrequency = 4000f;
+                        filter.enabled = true;
+                        Debug.Log("[AnyUser] Drop-In Interceptor: AudioLowPassFilter applied to AudioListener (4000Hz cut).");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[AnyUser] Audio interceptor notice: {ex.Message}");
+            }
         }
 
         public static AnyUserProfile GetDefaultProfile()

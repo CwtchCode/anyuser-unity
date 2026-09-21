@@ -35,12 +35,22 @@ Eliminate "Configuration Fatigue" by configuring screen shake dampening, hold-vs
 
 ---
 
+---
+
+## ⚡ Zero-Code Drop-In Features (No Code Changes Needed!)
+AnyUser bootstraps automatically via `[RuntimeInitializeOnLoadMethod]` before the first scene loads:
+* **Zero-Touch Auto-Bootstrap**: Automatically spawns `AnyUserParser` into `DontDestroyOnLoad` if not present in your scene.
+* **Global UI Auto-Scaling**: Automatically scales all active and newly loaded `CanvasScaler` components by `profile.vision.ui_scale`.
+* **Fullscreen Colorblind Overlay**: Automatically spawns a high-order screen-space overlay with `ColorblindCompensation.shader` for protanopia, deuteranopia, tritanopia, or monochromacy.
+* **Audio Interceptors**: Automatically sets `AudioSettings.speakerMode = AudioSpeakerMode.Mono` if requested, and attaches a 4000Hz `AudioLowPassFilter` to the active `AudioListener` for tinnitus relief.
+* **Multi-Path Discovery**: Checks `persistentDataPath`, `StreamingAssets`, `dataPath`, and project root for `profile.anyuser`.
+
+---
+
 ## 🚀 Quick Start Guide
 
 ### 1. Ingestion Singleton (`AnyUserParser`)
-Create an empty GameObject in your bootstrap/initial scene, name it `AnyUser`, and attach `AnyUserParser`:
-- It is marked `DontDestroyOnLoad` and persists across scenes.
-- Automatically discovers `Application.persistentDataPath/profile.anyuser` or `StreamingAssets/profile.anyuser`.
+You don't even need to place a prefab in your scene—AnyUser boots automatically! However, if you want custom inspector overrides, create a GameObject named `AnyUser` and attach `AnyUserParser`.
 
 ```csharp
 using AnyUser;
